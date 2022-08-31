@@ -1,4 +1,5 @@
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     FlatList,
@@ -25,11 +26,10 @@ import CheckBox from '@react-native-community/checkbox';
 import {Bar} from 'react-native-progress';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const ITEM_SIZE = 63;
-
 interface ItemProps {
     id: number;
     task: string;
+    completed: boolean;
     created_at: Date;
 }
 
@@ -37,7 +37,10 @@ export default function TodoList() {
     const [modalVisible, setModalVisible] = useState(false);
     const [todo, setTodo] = useState('');
     const [todoList, setTodoList] = useState<ItemProps[]>([
-        {id: 1, task: 'One', created_at: new Date()},
+        // {id: 1, task: 'One', completed: false, created_at: new Date()},
+    ]);
+    const [allTodos, setAllTodos] = useState<ItemProps[]>([
+        // {id: 1, task: 'One', completed: false, created_at: new Date()},
     ]);
     //   console.log(typeof todo, typeof todoList);
 
@@ -54,8 +57,13 @@ export default function TodoList() {
         item: null | ItemProps;
     }>({show: false, item: null});
 
-    const otpError = useRef(new Animated.Value(0)).current;
-    const taskAnime = useRef(new Animated.Value(0)).current;
+    const taskError = useRef(new Animated.Value(0)).current;
+    const checkboxAnime = useRef(new Animated.Value(0)).current;
+
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(8);
+    const [loading, setLoading] = useState(true);
+    const [maxReached, setMaxReached] = useState(false);
 
     //
     // Get data from
@@ -67,15 +75,30 @@ export default function TodoList() {
         AsyncStorage.getItem('todoList')
             .then(a => {
                 const data = JSON.parse(a);
-                console.log(data);
+                // console.log(data.length, 'total');
                 if (data !== null) {
-                    setTodoList(data);
+                    // setTodoList(data);
+                    setAllTodos(data);
                 }
             })
             .catch(e => {
                 console.log(e);
             });
     }
+
+    //
+    // Get data from
+    useEffect(() => {
+        // calculate max number of items to display
+        let num = page * perPage;
+
+        // Filter to get the items to display and set them
+        const list = allTodos.filter(t => t.id <= num);
+        // console.log(list.length);
+
+        setTodoList(list);
+        setLoading(false);
+    }, [page, perPage, allTodos]);
 
     //
     // Persist state
@@ -92,18 +115,18 @@ export default function TodoList() {
             });
     }
 
-    // Animate otp error
-    const triggerOtpError = () => {
-        Animated.timing(otpError, {
+    // Animate task error
+    const triggerTaskError = () => {
+        Animated.timing(taskError, {
             toValue: 1,
             duration: 1000,
             useNativeDriver: false,
         }).start();
     };
 
-    // Remove otp error
-    const removeOtpError = () => {
-        Animated.timing(otpError, {
+    // Remove task error
+    const removeTaskError = () => {
+        Animated.timing(taskError, {
             toValue: 0,
             duration: 1000,
             useNativeDriver: false,
@@ -111,8 +134,8 @@ export default function TodoList() {
     };
 
     // Animate checkbox
-    const triggerTaskAnime = () => {
-        Animated.timing(taskAnime, {
+    const triggerCheckboxAnime = () => {
+        Animated.timing(checkboxAnime, {
             toValue: 1,
             duration: 1000,
             useNativeDriver: false,
@@ -120,8 +143,8 @@ export default function TodoList() {
     };
 
     // Remove checkbox animation
-    const removeTaskAnime = () => {
-        Animated.timing(taskAnime, {
+    const removeCheckboxAnime = () => {
+        Animated.timing(checkboxAnime, {
             toValue: 0,
             duration: 0,
             useNativeDriver: false,
@@ -156,7 +179,7 @@ export default function TodoList() {
             persistState(JSON.stringify(newState));
         } else {
             if (todo.trim() === '') {
-                return triggerOtpError();
+                return triggerTaskError();
             }
 
             const lastItem = todoList.slice(-1)[0];
@@ -184,7 +207,7 @@ export default function TodoList() {
 
     //
     // Check or uncheck task
-    function setChecked(item, isChecked) {
+    function setChecked(item: ItemProps, isChecked: boolean) {
         // console.log(item);
         const newState = todoList.map(obj => {
             // if id equals clicked task, update completed property
@@ -202,7 +225,7 @@ export default function TodoList() {
 
     //
     // Toggle edit task
-    function toggleEditTask(item) {
+    function toggleEditTask(item: ItemProps) {
         setIsEditing({editing: true, item});
         setModalVisible(true);
         setTodo(item.task);
@@ -210,7 +233,7 @@ export default function TodoList() {
 
     //
     // Remove task from todo list
-    function deleteTask(item) {
+    function deleteTask(item: ItemProps) {
         const newState = todoList.filter(obj => obj.id !== item.id);
 
         persistState(JSON.stringify(newState));
@@ -218,22 +241,16 @@ export default function TodoList() {
 
     //
     //
-    const scrollY = useRef(new Animated.Value(0)).current;
-
-    const renderItem = ({item}) => {
+    const renderItem = ({item}: {item: ItemProps}) => {
         return (
             <View key={item.id.toString()} style={[styles.transParent]}>
                 <View style={{flexDirection: 'row'}}>
                     <View style={{flex: 1, flexDirection: 'row'}}>
                         <Animated.View
                             style={{
-                                color: taskAnime.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: ['#c026d3', '#22c55e'],
-                                }),
                                 transform: [
                                     {
-                                        translateX: taskAnime.interpolate({
+                                        translateX: checkboxAnime.interpolate({
                                             inputRange: [
                                                 0, 0.2, 0.4, 0.6, 0.8, 1,
                                             ],
@@ -330,9 +347,9 @@ export default function TodoList() {
     // If all items have been checked
     useEffect(() => {
         if (progress === 1) {
-            triggerTaskAnime();
+            triggerCheckboxAnime();
         } else {
-            removeTaskAnime();
+            removeCheckboxAnime();
         }
     }, [progress]);
 
@@ -364,6 +381,21 @@ export default function TodoList() {
                     data={todoList}
                     renderItem={renderItem}
                     keyExtractor={item => item.id.toString()}
+                    onEndReached={() => {
+                        console.log('End reached...');
+                        setLoading(true);
+
+                        if (!loading) {
+                            setTimeout(() => {
+                                setPage(prev => prev + 1);
+                            }, 3000);
+                        }
+                    }}
+                    ListFooterComponent={
+                        <View>
+                            {loading && <ActivityIndicator color="#c026d3" />}
+                        </View>
+                    }
                 />
             ) : (
                 <View>
@@ -373,7 +405,7 @@ export default function TodoList() {
                         </View>
 
                         <View style={{flex: 2}}>
-                            <Text>{showSingle.item.task}</Text>
+                            <Text>{showSingle?.item?.task}</Text>
                         </View>
                     </View>
 
@@ -384,7 +416,7 @@ export default function TodoList() {
 
                         <View style={{flex: 2}}>
                             <Text>
-                                {showSingle.item.completed
+                                {showSingle?.item?.completed
                                     ? 'Complete'
                                     : 'Pending'}
                             </Text>
@@ -400,7 +432,7 @@ export default function TodoList() {
 
                         <View style={{flex: 2}}>
                             <Text>
-                                {dayjs(showSingle.item.created_at).format(
+                                {dayjs(showSingle?.item?.created_at).format(
                                     'dddd, MMMM D, YYYY h:mm A',
                                 )}
                             </Text>
@@ -458,42 +490,42 @@ export default function TodoList() {
                                             style={[
                                                 styles.label,
                                                 {
-                                                    // color: otpError.interpolate(
-                                                    //     {
-                                                    //         inputRange: [0, 1],
-                                                    //         outputRange: [
-                                                    //             '#6b7280',
-                                                    //             '#c026d3',
-                                                    //         ],
-                                                    //     },
-                                                    // ),
-                                                    // transform: [
-                                                    //     {
-                                                    //         translateX:
-                                                    //             otpError.interpolate(
-                                                    //                 {
-                                                    //                     inputRange:
-                                                    //                         [
-                                                    //                             0,
-                                                    //                             0.2,
-                                                    //                             0.4,
-                                                    //                             0.6,
-                                                    //                             0.8,
-                                                    //                             1,
-                                                    //                         ],
-                                                    //                     outputRange:
-                                                    //                         [
-                                                    //                             -0,
-                                                    //                             10,
-                                                    //                             -10,
-                                                    //                             10,
-                                                    //                             -10,
-                                                    //                             0,
-                                                    //                         ],
-                                                    //                 },
-                                                    //             ),
-                                                    //     },
-                                                    // ],
+                                                    color: taskError.interpolate(
+                                                        {
+                                                            inputRange: [0, 1],
+                                                            outputRange: [
+                                                                '#6b7280',
+                                                                '#c026d3',
+                                                            ],
+                                                        },
+                                                    ),
+                                                    transform: [
+                                                        {
+                                                            translateX:
+                                                                taskError.interpolate(
+                                                                    {
+                                                                        inputRange:
+                                                                            [
+                                                                                0,
+                                                                                0.2,
+                                                                                0.4,
+                                                                                0.6,
+                                                                                0.8,
+                                                                                1,
+                                                                            ],
+                                                                        outputRange:
+                                                                            [
+                                                                                -0,
+                                                                                10,
+                                                                                -10,
+                                                                                10,
+                                                                                -10,
+                                                                                0,
+                                                                            ],
+                                                                    },
+                                                                ),
+                                                        },
+                                                    ],
                                                 },
                                             ]}>
                                             Task
@@ -504,7 +536,7 @@ export default function TodoList() {
                                             onChangeText={text => {
                                                 setTodo(text);
 
-                                                removeOtpError();
+                                                removeTaskError();
                                             }}
                                             style={styles.userText}
                                             placeholder="New task"
@@ -533,6 +565,11 @@ export default function TodoList() {
                                         ]}
                                         onPress={() => {
                                             setModalVisible(false);
+                                            setIsEditing({
+                                                editing: false,
+                                                item: null,
+                                            });
+                                            setTodo('');
                                         }}>
                                         Cancel
                                     </Text>
@@ -595,11 +632,17 @@ const styles = StyleSheet.create({
 
     transParent: {
         backgroundColor: '#f9fafb',
-        marginVertical: 5,
-        paddingVertical: 7,
+        marginVertical: 15,
+        // paddingVertical: 7,
+        paddingTop: 14,
+        paddingBottom: 7,
         paddingLeft: 10,
         // flexDirection: 'row',
         borderTopRightRadius: 15,
         borderBottomLeftRadius: 15,
     },
+
+    infoContainer: {padding: 5, marginTop: 20},
+
+    label: {color: 'grey'},
 });
